@@ -16,26 +16,54 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-REFLECT = "reflect"
-CONTINUOUS = "continuous"
+REFLECT = "REFLECT"
+CONTINUOUS = "CONTINUOUS"
+PARALLEL = "PARALLEL"
+IN_RANGE = "IN_RANGE"
+NOT_IN_RANGE = "NOT_IN_RANGE"
 
-ID, X, Y, VX, VY, NEXT_EVENT_TIME, NEXT_EVENT_OBJECT = [x for x in range(7)]
 
 class Region:
-    def __init__(self, playable, c1, c2, bc):
+    def __init__(self, playable, p1, p2, bc):
         """
         bool playable - Note, the order of stacking will determine overlapping values, the last value will be used.
-        (x, y) c1 - corner 1
-        (x, y) c2 - corner 2
+        Point Objcet p1 - point 1
+        Point Object p2 - point 2
         (Vertical, Horizontal) bc - Boundary Conditions
         """
         self.playable = playable
-        self.min_x = min([c1[0], c2[0]])
-        self.min_y = min([c1[1], c2[1]])
-        self.max_x = max([c1[0], c2[0]])
-        self.max_y = max([c1[1], c2[1]])
+        self.min_x = min([p1.x, p2.x])
+        self.min_y = min([p1.y, p2.y])
+        self.max_x = max([p1.x, p2.x])
+        self.max_y = max([p1.y, p2.y])
         self.bcVertical = bc[0]
         self.bcHorizontal = bc[1]
+        self.edges = get_edges_from_region(self)
+
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __str__(self):
+        return '(' + str(x) + ', ' + str(y) + ')'
+
+class Vector:
+    def __init__(self, point, xmag, ymax):
+        self.point = point
+        self.x = point.x
+        self.y = point.y
+        self.vx = xmag
+        self.vy = ymag
+
+class Edge:
+    def __init__(self, p1, p2):
+        self.p1 = p1
+        self.p2 = p2
+        # In the form ax + by = c
+        self.a = p2.y - p1.y
+        self.b = p1.x - p2.x
+        self.c = self.a * p1.x + self.b * p1.y
 
 def get_bounds(world):
     """Returns the bounds of the playable world to get a range of values for generating initial electrons.
@@ -80,17 +108,27 @@ def generate_electron(id, world, bounds):
     vx, vy = get_speed()
     return [id, x, y, vx, vy, -1, -1]
 
-def get_edges_from_object(obj):
+def get_edges_from_region(obj):
     l1 = ((obj.min_x, obj.max_x), (obj.min_y, obj.min_y))
     l2 = ((obj.max_x, obj.max_x), (obj.max_y, obj.min_y))
     l3 = ((obj.min_x, obj.max_x), (obj.max_y, obj.max_y))
     l4 = ((obj.min_x, obj.min_x), (obj.max_y, obj.min_y))
     return [l1, l2, l3, l4]
 
+def get_intesection_of_lines(e1, e2):
+    det = e1.a * e2.b - e2.a * e1.b
+    if det == 0:
+        return [PARALLEL, Point(0, 0)]
+    x = (e2.b * e1.c - e1.b * e2.c)/det
+    y = (e1.a * e2.c - e2.a * e1.c)/det
+    p = Point(x, y)
+    if x > min([e1.p1.x, e1.p2.x]) and x < max([e1.p1.x, e1.p2.x]) and y > min([e1.p1.y, e1.p2.y]) and y < max([e1.p1.y, e1.p2.y]) and x > min([e2.p1.x, e2.p2.x]) and x < max([e2.p1.x, e2.p2.x]) and y > min([e2.p1.y, e2.p2.y]) and y < max([e2.p1.y, e2.p2.y]):
+        return [IN_RANGE, p]
+    return [NOT_IN_RANGE, p]
+
+
 def define_border(world):
     pass
-
-
 
 
 def set_next_event(electon):
@@ -101,15 +139,23 @@ def set_next_event(electon):
 if __name__ == "__main__":
     world = []
     world.append(Region(playable=True,
-                        c1=(-100, -50),
-                        c2=(100, 50),
+                        p1=Point(-100, -50),
+                        p2=Point(100, 50),
                         bc=(REFLECT, CONTINUOUS)
                         ))
 
     bounds = get_bounds(world)
     state = []
 
-    edges = get_edges_from_object(world[0])
-    for e in edges:
+    for e in world[0].edges:
         plt.plot(e[0], e[1])
     plt.savefig("test.png")
+
+    e1 = Edge(Point(-100, 0), Point(100,0))
+    e2 = Edge(Point(0, 100), Point(0,-100))
+    e3 = Edge(Point(-100, 10), Point(100,10))
+    e4 = Edge(Point(0, 100), Point(100,10))
+
+    print(get_intesection_of_lines(e1, e2))
+    print(get_intesection_of_lines(e1, e3))
+    print(get_intesection_of_lines(e1, e4))
