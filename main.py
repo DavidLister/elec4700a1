@@ -1,6 +1,4 @@
-# main.py
-#
-# Monte Carlo Modeling of Electron Transport
+# main.py Monte Carlo Modeling of Electron Transport
 # For ELEC 4700
 # January 2018
 # David Lister
@@ -14,6 +12,9 @@
 
 import random
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 REFLECT = "reflect"
 CONTINUOUS = "continuous"
@@ -80,7 +81,11 @@ def generate_electron(id, world, bounds):
     return [id, x, y, vx, vy, -1, -1]
 
 def get_edges_from_object(obj):
-    pass
+    l1 = ((obj.min_x, obj.max_x), (obj.min_y, obj.min_y))
+    l2 = ((obj.max_x, obj.max_x), (obj.max_y, obj.min_y))
+    l3 = ((obj.min_x, obj.max_x), (obj.max_y, obj.max_y))
+    l4 = ((obj.min_x, obj.min_x), (obj.max_y, obj.min_y))
+    return [l1, l2, l3, l4]
 
 def define_border(world):
     pass
@@ -103,3 +108,8 @@ if __name__ == "__main__":
 
     bounds = get_bounds(world)
     state = []
+
+    edges = get_edges_from_object(world[0])
+    for e in edges:
+        plt.plot(e[0], e[1])
+    plt.savefig("test.png")
