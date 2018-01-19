@@ -40,13 +40,20 @@ class Region:
         self.bcHorizontal = bc[1]
         self.edges = get_edges_from_region(self)
 
+    def plot(self):
+        for edge in self.edges:
+            edge.plot()
+
 class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
 
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+
     def __str__(self):
-        return '(' + str(x) + ', ' + str(y) + ')'
+        return '(' + str(self.x) + ', ' + str(self.y) + ')'
 
 class Vector:
     def __init__(self, point, xmag, ymax):
@@ -64,6 +71,12 @@ class Edge:
         self.a = p2.y - p1.y
         self.b = p1.x - p2.x
         self.c = self.a * p1.x + self.b * p1.y
+
+    def __str__(self):
+        return str(self.p1) + "---" + str(self.p2)
+
+    def plot(self):
+        plt.plot((self.p1.x, self.p2.x), (self.p1.y, self.p2.y))
 
 def get_bounds(world):
     """Returns the bounds of the playable world to get a range of values for generating initial electrons.
@@ -109,10 +122,10 @@ def generate_electron(id, world, bounds):
     return [id, x, y, vx, vy, -1, -1]
 
 def get_edges_from_region(obj):
-    l1 = ((obj.min_x, obj.max_x), (obj.min_y, obj.min_y))
-    l2 = ((obj.max_x, obj.max_x), (obj.max_y, obj.min_y))
-    l3 = ((obj.min_x, obj.max_x), (obj.max_y, obj.max_y))
-    l4 = ((obj.min_x, obj.min_x), (obj.max_y, obj.min_y))
+    l1 = Edge(Point(obj.min_x, obj.min_y), Point(obj.max_x, obj.min_y))
+    l2 = Edge(Point(obj.max_x, obj.max_y), Point(obj.max_x, obj.min_y))
+    l3 = Edge(Point(obj.min_x, obj.max_y), Point(obj.max_x, obj.max_y))
+    l4 = Edge(Point(obj.min_x, obj.max_y), Point(obj.min_x, obj.min_y))
     return [l1, l2, l3, l4]
 
 def get_intesection_of_lines(e1, e2):
@@ -122,19 +135,39 @@ def get_intesection_of_lines(e1, e2):
     x = (e2.b * e1.c - e1.b * e2.c)/det
     y = (e1.a * e2.c - e2.a * e1.c)/det
     p = Point(x, y)
-    if x > min([e1.p1.x, e1.p2.x]) and x < max([e1.p1.x, e1.p2.x]) and y > min([e1.p1.y, e1.p2.y]) and y < max([e1.p1.y, e1.p2.y]) and x > min([e2.p1.x, e2.p2.x]) and x < max([e2.p1.x, e2.p2.x]) and y > min([e2.p1.y, e2.p2.y]) and y < max([e2.p1.y, e2.p2.y]):
+    if x >= min([e1.p1.x, e1.p2.x]) and x <= max([e1.p1.x, e1.p2.x]) and y >= min([e1.p1.y, e1.p2.y]) and y <= max([e1.p1.y, e1.p2.y]) and x >= min([e2.p1.x, e2.p2.x]) and x <= max([e2.p1.x, e2.p2.x]) and y >= min([e2.p1.y, e2.p2.y]) and y <= max([e2.p1.y, e2.p2.y]):
         return [IN_RANGE, p]
     return [NOT_IN_RANGE, p]
 
+def get_next_intersection(line, world):
+    all_edges = []
+    for region in world:
+        for edge in region.edges:
+            all_edges.append(edge)
+
+    intersections = []
+    for edge in all_edges:
+        status, point = get_intersection_of_lines(line, edge)
+        if status == IN_RANGE:
+            intersections.apend(point
+
 
 def define_border(world):
-    pass
+    min_x = min([region.min_x for region in world])
+    initial_edge = Edge(Point(0, 0), Point(2 * min_x, 0))
+    border = []
+    over = False
+    while not over:
+        if is_complete(border):
+            over = True
+
 
 
 def set_next_event(electon):
     pass
 
-
+def is_complete(border):
+    if border[0].p1 == border[-1].p2
 
 if __name__ == "__main__":
     world = []
@@ -144,11 +177,16 @@ if __name__ == "__main__":
                         bc=(REFLECT, CONTINUOUS)
                         ))
 
+    world.append(Region(playable=True,
+                        p1=Point(-50, -100),
+                        p2=Point(50, 100),
+                        bc=(REFLECT, CONTINUOUS)
+                        ))
+
     bounds = get_bounds(world)
     state = []
-
-    for e in world[0].edges:
-        plt.plot(e[0], e[1])
+    for region in world:
+        region.plot()
     plt.savefig("test.png")
 
     e1 = Edge(Point(-100, 0), Point(100,0))
