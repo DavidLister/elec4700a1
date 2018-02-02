@@ -58,9 +58,11 @@ class Electron:
         self.position = get_initial_position(world)
         self.velocity = get_thermal_vector(self.position)
         self.path_history = [self.position.as_tuple()]
-        self.time = 0
+        self.time_history = []
+        self.velocity_history = [self.velocity.as_tuple()]
+        self.events = 0
 
-    def plot(self, display = False):
+    def plot(self):
         points = np.array(self.path_history).transpose()
         plt.plot(points[0], points[1])
 
@@ -85,6 +87,9 @@ class Velocity:
 
     def as_numpy(self):
         return np.array((self.x, self.y))
+
+    def as_tuple(self):
+        return (self.x, self.y)
 
     def __str__(self):
         return '(' + str(self.x) + ', ' + str(self.y) + ", r: " + str(self.r) + ')'
@@ -117,8 +122,8 @@ def get_initial_position(world):
 def get_thermal_vector(position):
     # todo - make these parameters physical
     # todo - make velocity depend on location
-    vx = random.gauss(0, 10)
-    vy = random.gauss(0, 10)
+    vx = 1e9 * random.gauss(0, thermal_sigma)
+    vy = 1e9 * random.gauss(0, thermal_sigma)
     return Velocity(vx, vy)
 
 def get_intersection(e1, e2):
@@ -190,19 +195,29 @@ def get_intersections_with_border(border, line):
     return points
 
 def update_electron_scatter(electron, new_position):
+    distance =get_path_length(electron.position.as_tuple(), new_position.as_tuple())
+    velocity = electron.velocity.r
+    dt = distance/velocity
+    electron.time_history.append(dt)
     electron.position = new_position
     electron.path_history.append(new_position.as_tuple())
     electron.velocity = get_thermal_vector(new_position)
-    electron.time += 1 #todo - fix this
+    electron.velocity_history.append(electron.velocity.as_tuple())
+    electron.events += 1 #todo - fix this
 
 def update_electron_reflect(electron, point, reflection):
+    distance = get_path_length(electron.position.as_tuple(), point.as_tuple())
+    velocity = electron.velocity.r
+    dt = distance / velocity
+    electron.time_history.append(dt)
     electron.position = point
     electron.position.x += reflection[0] * DELTA
     electron.position.y += reflection[1] * DELTA
     electron.velocity.x = reflection[0]
     electron.velocity.y = reflection[1]
     electron.path_history.append(point.as_tuple())
-    electron.time += 1 # todo - fix this
+    electron.velocity_history.append(electron.velocity.as_tuple())
+    electron.events += 1 # todo - fix this
 
 def get_closest_point(ref, lst):
     dx = lst[0].x - ref.x
@@ -230,11 +245,11 @@ def get_reflect_info(world, point):
             return REFLECT, edge
     print("ERROR -Point not on edge")
 
-def simulate_electron_(world, electron, end_time, mean_free_path):
+def simulate_electron_(world, electron, event_count, mean_free_path):
     #print(electron.position)
     over = False
     while not over:
-        if electron.time >= end_time:
+        if electron.events >= event_count:
             over = True
         distance = get_distance(mean_free_path)
         test_position = get_position_from_velocity(electron.position, electron.velocity, distance)
@@ -257,23 +272,68 @@ def simulate_electron_(world, electron, end_time, mean_free_path):
             #print('Reflect', str(reflect_point), electron.velocity, reflection, get_radius(reflection[0], reflection[1]))
             update_electron_reflect(electron, reflect_point, reflection)
 
+def run_simulation(world, electrons, iterations, mean_free_path, print_status_every = 10):
+    tally = 0
+    for electron in electrons:
+        if tally % print_status_every == 0:
+            print("Simulating " + str(tally) + " of " + str(len(electrons)) + " electrons")
+        simulate_electron_(world, electron, iterations, mean_free_path)
+        tally += 1
+
+def get_path_length(t1, t2):
+    dx = t1[0] - t2[0]
+    dy = t1[1] - t2[1]
+    return get_radius(dx, dy)
+
+def plot_path_histogram(electrons, bin_count, show=True):
+    path_list = []
+    for electron in electrons:
+        last = electron.path_history[0]
+        for step in electron.path_history[1:]:
+            path_list.append(get_path_length(last, step))
+            last = step
+    n, bins, patches = plt.hist(path_list, bin_count, density=True, facecolor='g', alpha=0.75)
+    if show:
+        plt.title("Path length histogram")
+        plt.xlabel("Path length")
+        plt.ylabel("Probability")
+        plt.show()
+    return np.mean(path_list)
+
+def plot_velocity_histogram(electrons, bin_count, show=True):
+    velocity_list = []
+    for electron in electrons:
+        for step in electron.velocity_history:
+            velocity_list.append(get_radius(step[0], step[1]) * 10e-9)
+    n, bins, patches = plt.hist(velocity_list, bin_count, density=True, facecolor='g', alpha=0.75)
+    if show:
+        plt.title("Velocity histogram")
+        plt.xlabel("Velocity (m/s)")
+        plt.ylabel("Probability")
+        plt.show()
+    print(np.mean(velocity_list))
+    return mass * np.mean(velocity_list) ** 2 / (2 * boltzmann)
+
+
 
 # Main Simulation
 
 if __name__ == "__main__":
+    temperature = 300 # K
+    mass = 9.10938356e-31 #kg
+    boltzmann = 1.38064852e-23 # m^2 kg s^-2 K^-1
+    thermal_sigma = np.sqrt(boltzmann * temperature / mass)
+    thermal_sigma = 7.5e3
+    print(thermal_sigma)
     pt_list = [(-200, -100), (-20, -100), (-20, -60), (-10, -50), (10, -50), (20, -60), (20, -100), (200, -100), (200, 100), (20, 100), (20, 60), (10, 50), (-10, 50), (-20, 60), (-20, 100), (-200, 100)]
+    island = [(10, 0), (100, 50), (100, -50)]
     world = World(pt_list)
-    electrons = generate_electron_list(world, 10)
-    for electron in electrons:
-        simulate_electron_(world, electron, 100, 150)
+    world.border = world.border + make_border(island)
+    electrons = generate_electron_list(world, 100)
+    run_simulation(world, electrons, 100, 10)
+    print("Simulation complete")
     world.plot()
     plot_electron_list(electrons, True)
-    #test_point = Point(12.4805, -64.5816)
-    #xmin, xmax, ymin, ymax = world.bounds
-    #remote_point = Point(0, ymax * 2)
-    #remote_line = Edge(remote_point, test_point)
-    #count = 0
-    #for edge in world.border:
-    #    if get_intersection(remote_line, edge) is not None:
-    #        count += 1
-    #print(count)
+    print(plot_velocity_histogram(electrons, 100)) # expecting 1.8e5
+
+    todo - Fix theral sigma/velocity
