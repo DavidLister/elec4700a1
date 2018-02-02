@@ -14,8 +14,8 @@
       <file leaf-file-name="mc_sim.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/mc_sim.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="485">
-              <caret line="269" column="47" lean-forward="false" selection-start-line="269" selection-start-column="47" selection-end-line="269" selection-end-column="47" />
+            <state relative-caret-position="238">
+              <caret line="14" column="27" lean-forward="false" selection-start-line="14" selection-start-column="27" selection-end-line="14" selection-end-column="27" />
               <folding>
                 <element signature="e#154#185#0" expanded="true" />
               </folding>
@@ -75,7 +75,7 @@
   </component>
   <component name="PropertiesComponent">
     <property name="settings.editor.selected.configurable" value="reference.settingsdialog.IDE.editor.colors.Custom" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/../../PHYS 4007/phys4007lab1-vacuum" />
   </component>
   <component name="RunDashboard">
     <option name="ruleStates">
@@ -172,8 +172,8 @@
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/mc_sim.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="485">
-          <caret line="269" column="47" lean-forward="false" selection-start-line="269" selection-start-column="47" selection-end-line="269" selection-end-column="47" />
+        <state relative-caret-position="238">
+          <caret line="14" column="27" lean-forward="false" selection-start-line="14" selection-start-column="27" selection-end-line="14" selection-end-column="27" />
           <folding>
             <element signature="e#154#185#0" expanded="true" />
           </folding>

@@ -12,9 +12,7 @@ import random
 import numpy as np
 
 # Todo List
-#   - Iniitalize electrons
-#   - Finish electron object
-#   - Does the mean free path include reflections?
+#   - Reflextion boundaries
 #   - Implement heat in different regions
 
 # Symbolic Constants
