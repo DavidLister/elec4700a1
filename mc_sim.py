@@ -138,7 +138,7 @@ def get_initial_position(world):
 def get_thermal_vector(position):
     # todo - make these parameters physical
     # todo - make velocity depend on location
-    vx = 1e9 * random.gauss(0, thermal_sigma)
+    vx = 1e9 * random.gauss(0.25*thermal_sigma, thermal_sigma)
     vy = 1e9 * random.gauss(0, thermal_sigma)
     return Velocity(vx, vy)
 

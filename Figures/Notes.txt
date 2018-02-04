@@ -4,3 +4,13 @@ Mean free path length with 10nm set at distance = 9.14372933527 nm
 1/2 m v^2 = k T
 
 T = m v^2 / (2k)
+
+0.25 sigma v right
+Mean velocity: 176720.966421
+Mean x velocity: 27012.3387295 Mean y velocity: -97.3086255852
+Average temperature 267.870794145
+
+0.25 sigma v left
+Mean velocity: 177969.863458
+Mean x velocity: -25482.9094287 Mean y velocity: -0.64179649609
+Average temperature 271.670288514
