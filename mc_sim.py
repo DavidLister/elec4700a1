@@ -10,6 +10,8 @@
 import matplotlib.pyplot as plt
 import random
 import numpy as np
+from scipy.ndimage import gaussian_filter
+from PIL import Image
 
 # Todo List
 #   - Reflextion boundaries
@@ -18,9 +20,10 @@ import numpy as np
 # Symbolic Constants
 REFLECT = "REFLECT"
 TELEPORT = "TELEPORT"
-DELTA = 1E-3
+DELTA = 1E-9
 # Useful Lambda Functions
 get_radius = lambda x, y: np.sqrt(x**2 + y**2)
+scale_to_red_blue = lambda val, maximum: (int(255 * (val/maximum)), 0, int(255 * (1 - val/maximum)))
 
 # Classes
 
@@ -46,6 +49,7 @@ class Edge:
         self.a = p2.y - p1.y
         self.b = p1.x - p2.x
         self.c = self.a * p1.x + self.b * p1.y
+        self.teleport_position_change = (0, 0)
 
     def plot(self):
         return plt.plot((self.p1.x, self.p2.x), (self.p1.y, self.p2.y))
@@ -63,12 +67,24 @@ class Electron:
         self.events = 0
 
     def plot(self):
-        points = np.array(self.path_history).transpose()
-        plt.plot(points[0], points[1])
+        segments = []
+        work_in_progress = []
+        for point in self.path_history:
+            if point == TELEPORT:
+                segments.append(work_in_progress)
+                work_in_progress = []
+
+            else:
+                work_in_progress.append(point)
+        segments.append(work_in_progress)
+
+        for segment in segments:
+            segment = np.array(segment).transpose()
+            plt.plot(segment[0], segment[1])
 
 
 class World:
-    def __init__(self, border_points, teleport_edges = []):
+    def __init__(self, border_points):
         self.point_list = border_points
         self.border = make_border(self.point_list)
         self.bounds = get_bounds(self.point_list)
@@ -166,6 +182,10 @@ def get_distance(mfp):
     val = val + 0j
     return mfp * np.real(np.log(-1/val))
 
+def get_distance_mft(mft, velocity):
+    mfp = mft * velocity
+    return get_distance(mfp)
+
 def generate_electron_list(world, n):
     lst = []
     for i in range(n):
@@ -203,7 +223,7 @@ def update_electron_scatter(electron, new_position):
     electron.path_history.append(new_position.as_tuple())
     electron.velocity = get_thermal_vector(new_position)
     electron.velocity_history.append(electron.velocity.as_tuple())
-    electron.events += 1 #todo - fix this
+    electron.events += 1
 
 def update_electron_reflect(electron, point, reflection):
     distance = get_path_length(electron.position.as_tuple(), point.as_tuple())
@@ -211,13 +231,31 @@ def update_electron_reflect(electron, point, reflection):
     dt = distance / velocity
     electron.time_history.append(dt)
     electron.position = point
-    electron.position.x += reflection[0] * DELTA
-    electron.position.y += reflection[1] * DELTA
+    electron.position.x += (reflection[0]/velocity) * DELTA * 2
+    electron.position.y += (reflection[1]/velocity) * DELTA * 2
     electron.velocity.x = reflection[0]
     electron.velocity.y = reflection[1]
     electron.path_history.append(point.as_tuple())
     electron.velocity_history.append(electron.velocity.as_tuple())
-    electron.events += 1 # todo - fix this
+    electron.events += 1
+
+def update_electron_teleport(electron, point, delta):
+    #print("Teleporting")
+    electron.path_history.append(point.as_tuple())
+    #print(point)
+    distance = get_path_length(electron.position.as_tuple(), point.as_tuple())
+    velocity = electron.velocity.r
+    dt = distance / velocity
+    electron.time_history.append(dt)
+    electron.position = point
+    electron.position.x += delta[0] + (electron.velocity.x/velocity) * DELTA * 2.0
+    electron.position.y += delta[1] + (electron.velocity.y/velocity) * DELTA * 2.0
+    electron.path_history.append(TELEPORT)
+    electron.path_history.append(electron.position.as_tuple())
+    electron.velocity_history.append(electron.velocity.as_tuple())
+    #print(electron.position)
+
+
 
 def get_closest_point(ref, lst):
     dx = lst[0].x - ref.x
@@ -245,13 +283,13 @@ def get_reflect_info(world, point):
             return REFLECT, edge
     print("ERROR -Point not on edge")
 
-def simulate_electron_(world, electron, event_count, mean_free_path):
+def simulate_electron_(world, electron, event_count, mean_free_time):
     #print(electron.position)
     over = False
     while not over:
         if electron.events >= event_count:
             over = True
-        distance = get_distance(mean_free_path)
+        distance = get_distance_mft(mean_free_time, electron.velocity.r)
         test_position = get_position_from_velocity(electron.position, electron.velocity, distance)
         test_line = Edge(electron.position, test_position)
         intersections = get_intersections_with_border(world.border, test_line)
@@ -263,14 +301,18 @@ def simulate_electron_(world, electron, event_count, mean_free_path):
                 #print(point)
             reflect_point = get_closest_point(electron.position, intersections)
             reflect_type, reflect_edge = get_reflect_info(world, reflect_point)
-            #todo - implement teleport border
 
-            normal = np.array(((reflect_edge.p2.y - reflect_edge.p1.y), (reflect_edge.p1.x - reflect_edge.p2.x)))
-            normal = normal / np.linalg.norm(normal)
-            incident = np.array((electron.velocity.x, electron.velocity.y))
-            reflection = incident - 2 * np.dot(incident, normal) * normal
-            #print('Reflect', str(reflect_point), electron.velocity, reflection, get_radius(reflection[0], reflection[1]))
-            update_electron_reflect(electron, reflect_point, reflection)
+            if reflect_type == TELEPORT:
+                #print("Teleport!")
+                update_electron_teleport(electron, reflect_point, reflect_edge.teleport_position_change)
+
+            else:
+                normal = np.array(((reflect_edge.p2.y - reflect_edge.p1.y), (reflect_edge.p1.x - reflect_edge.p2.x)))
+                normal = normal / np.linalg.norm(normal)
+                incident = np.array((electron.velocity.x, electron.velocity.y))
+                reflection = incident - 2 * np.dot(incident, normal) * normal
+                #print('Reflect', str(reflect_point), electron.velocity, reflection, get_radius(reflection[0], reflection[1]))
+                update_electron_reflect(electron, reflect_point, reflection)
 
 def run_simulation(world, electrons, iterations, mean_free_path, print_status_every = 10):
     tally = 0
@@ -287,12 +329,18 @@ def get_path_length(t1, t2):
 
 def plot_path_histogram(electrons, bin_count, show=True):
     path_list = []
+    skipnext = False
     for electron in electrons:
         last = electron.path_history[0]
         for step in electron.path_history[1:]:
-            path_list.append(get_path_length(last, step))
-            last = step
-    n, bins, patches = plt.hist(path_list, bin_count, density=True, facecolor='g', alpha=0.75)
+            if step == TELEPORT:
+                skipnext = True
+            elif skipnext:
+                skipnext = False
+            else:
+                path_list.append(get_path_length(last, step))
+                last = step
+    n, bins, patches = plt.hist(path_list, bin_count)
     if show:
         plt.title("Path length histogram")
         plt.xlabel("Path length")
@@ -302,17 +350,108 @@ def plot_path_histogram(electrons, bin_count, show=True):
 
 def plot_velocity_histogram(electrons, bin_count, show=True):
     velocity_list = []
+    velocity_x = []
+    velocity_y = []
     for electron in electrons:
         for step in electron.velocity_history:
-            velocity_list.append(get_radius(step[0], step[1]) * 10e-9)
-    n, bins, patches = plt.hist(velocity_list, bin_count, density=True, facecolor='g', alpha=0.75)
+            velocity_list.append(get_radius(step[0], step[1]) * 1e-9)
+            velocity_x.append(step[0] * 1e-9)
+            velocity_y.append(step[1] * 1e-9)
+    n, bins, patches = plt.hist(velocity_list, bin_count)
     if show:
         plt.title("Velocity histogram")
         plt.xlabel("Velocity (m/s)")
         plt.ylabel("Probability")
         plt.show()
-    print(np.mean(velocity_list))
-    return mass * np.mean(velocity_list) ** 2 / (2 * boltzmann)
+    print("Mean velocity:", np.mean(velocity_list))
+    print("Mean x velocity:", np.mean(velocity_x), "Mean y velocity:", np.mean(velocity_y))
+    print("Average temperature", mass * np.mean(velocity_list) ** 2 / (2 * boltzmann))
+
+def int_by_direction(value, dir):
+    if np.sign(dir) > 0:
+        return np.ceil(value)
+    else:
+        return np.floor(value)
+
+def make_heatmap(world, electron_list, scale = 1):
+    x_range = [x for x in range(int(world.bounds[0] * scale), int(world.bounds[1] * scale + 2))]
+    x_index = {x_range[i]:i for i in range(len(x_range))}
+    y_range = [y for y in range(int(world.bounds[2] * scale), int(world.bounds[3] * scale + 2))]
+    y_index = {y_range[i]:i for i in range(len(y_range))}
+    frame = [[0 for x in x_range] for y in y_range]
+    frame = np.array(frame, dtype="float64")
+
+
+    skipnext = False
+    tally = 0
+    for electron in electron_list:
+        tally += 1
+        if tally %10 == 0:
+            print("Processing", tally, "out of", len(electron_list), "electrons")
+        last = electron.path_history[0]
+        index = 0
+        for point in electron.path_history[1:]:
+            if point == TELEPORT:
+                skipnext = True
+            elif skipnext:
+                skipnext = False
+                last = point
+            else:
+                if point[0] < last[0]:
+                    left = point
+                    right = last
+                else:
+                    left = last
+                    right = point
+                #plt.plot((left[0], right[0]), (left[1], right[1]))
+                #print(index, len(electron.path_history), len(electron.velocity_history), electron.path_history.count(TELEPORT), electron.path_history.index(point))
+                velocity = electron.velocity_history[index]
+                velocity = get_radius(velocity[0]*scale, velocity[1]*scale)
+                dx = right[0]*scale - left[0]*scale
+                dy = right[1]*scale - left[1]*scale
+                slope = dy/dx
+                over = False
+                current_x = left[0] * scale
+                current_y = left[1] * scale
+                while not over:
+                    delta_x = np.ceil(current_x) - current_x
+                    delta_y = int_by_direction(current_y, slope) - current_y
+                    r_squared_x = delta_x**2 +  (delta_x * slope)**2
+                    r_squared_y = delta_y**2 + (delta_y/slope)**2
+                    r_squared_to_end = (right[0]*scale - current_x)**2 + (right[1]*scale - current_y)**2
+                    min_r = np.min([r_squared_x, r_squared_y, r_squared_to_end])
+                    time = np.sqrt(min_r)/velocity
+                    #print(slope, left, right, current_x, current_y)
+                    frame[y_index[np.ceil(current_y)]][x_index[np.ceil(current_x)]] += time
+                    if min_r == r_squared_x:
+                        current_x = np.ceil(current_x) + DELTA
+                        current_y = current_y + slope * (delta_x + DELTA)
+                    elif min_r == r_squared_y:
+                        current_x = current_x + ((delta_y + DELTA)/slope)
+                        current_y = int_by_direction(current_y, slope) + DELTA * np.sign(slope)
+                    else:
+                        over = True
+                last = point
+                index += 1
+    #plt.show()
+    mask = np.ma.masked_equal(frame, 0)
+    frame = gaussian_filter(frame, sigma=scale)
+    maximum = np.max(frame)
+
+    img = Image.new("RGB", (len(frame[0]), len(frame)))
+    for row in range(len(frame)):
+        for col in range(len(frame[0])):
+            if mask[row][col] != 0:
+                img.putpixel((col, row), scale_to_red_blue(frame[row][col], maximum))
+
+            else:
+                img.putpixel((col, row), (50, 50, 50))
+
+    img.save("heatmap.png")
+    plt.imshow(frame)
+    plt.show()
+
+
 
 
 
@@ -320,20 +459,28 @@ def plot_velocity_histogram(electrons, bin_count, show=True):
 
 if __name__ == "__main__":
     temperature = 300 # K
-    mass = 9.10938356e-31 #kg
+    mass = 0.26*9.10938356e-31 #kg
     boltzmann = 1.38064852e-23 # m^2 kg s^-2 K^-1
+    mean_free_path_time = 0.2e-12
     thermal_sigma = np.sqrt(boltzmann * temperature / mass)
-    thermal_sigma = 7.5e3
+    #thermal_sigma = 7.5e3
     print(thermal_sigma)
+
     pt_list = [(-200, -100), (-20, -100), (-20, -60), (-10, -50), (10, -50), (20, -60), (20, -100), (200, -100), (200, 100), (20, 100), (20, 60), (10, 50), (-10, 50), (-20, 60), (-20, 100), (-200, 100)]
     island = [(10, 0), (100, 50), (100, -50)]
     world = World(pt_list)
     world.border = world.border + make_border(island)
-    electrons = generate_electron_list(world, 100)
-    run_simulation(world, electrons, 100, 10)
+    left_tele = Edge(Point(-200, -100), Point(-200, 100))
+    left_tele.teleport_position_change = (400, 0)
+    right_tele = Edge(Point(200, -100), Point(200, 100))
+    right_tele.teleport_position_change = (-400, 0)
+    world.teleport_edges.append(left_tele)
+    world.teleport_edges.append(right_tele)
+
+    electrons = generate_electron_list(world, 1000)
+    run_simulation(world, electrons, 100, mean_free_path_time)
     print("Simulation complete")
     world.plot()
     plot_electron_list(electrons, True)
-    print(plot_velocity_histogram(electrons, 100)) # expecting 1.8e5
-
-    todo - Fix theral sigma/velocity
+    plot_velocity_histogram(electrons, 100) # expecting 1.8e5
+    make_heatmap(world, electrons, 10)
